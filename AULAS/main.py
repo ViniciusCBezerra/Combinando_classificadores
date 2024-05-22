@@ -8,6 +8,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.ensemble import VotingClassifier 
 from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import GridSearchCV
+from sklearn.ensemble import BaggingClassifier
 
 
 def prepara(df):
@@ -78,8 +79,9 @@ parametros = {
 }
 
 grid_search = GridSearchCV(votacao,parametros,n_jobs=-1)
-grid_search.fit(x_treino,y_treino)
-print(grid_search.best_score_)
 
-y_pred = grid_search.predict(x_teste)
+bagging_classifier = BaggingClassifier(n_estimators=10,random_state=42)
+bagging_classifier.fit(x_treino,y_treino)
+y_pred = bagging_classifier.predict(x_teste)
+
 print(accuracy_score(y_teste,y_pred))
