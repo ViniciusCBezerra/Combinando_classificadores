@@ -5,8 +5,12 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_validate
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
-from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import BaggingClassifier, VotingClassifier
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from catboost import CatBoostClassifier
 
 
 def prepara(df):
@@ -53,21 +57,82 @@ for modelo, nome  in zip([modelo1, modelo2, modelo3],nome_modelos):
 
     pipelines.append(pipeline)
 
-votacao = VotingClassifier(estimators=(
-    (nome_modelos[0],pipelines[0]),
-    (nome_modelos[1],pipelines[1]),
-    (nome_modelos[2],pipelines[2])
-),voting='soft')
-
-validacao = cross_validate(votacao,x_treino,y_treino,cv=5)
-
 parametros = {
     'voting': ['hard','soft'],
     'weights': [(1,1,1),(2,1,1),(1,2,1),(1,1,2)]
 }
 
-grid_search = GridSearchCV(votacao,parametros,n_jobs=-1)
-grid_search.fit(x_treino,y_treino)
+bagging_classifier = BaggingClassifier(
+    n_estimators=10,
+    random_state=42
+)
+bagging_classifier.fit(x_treino,y_treino)
 
-print(grid_search.best_params_)
-print(grid_search.best_score_)
+y_pred = bagging_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+modelo_base = pipelines[0]
+param_bagging = {
+    'n_estimators': [10,20,30],
+    'max_samples': [0.5,0.7,0.9],
+    'max_features': [0.5,0.7,0.9]
+}
+
+bagging_grid = GridSearchCV(
+    BaggingClassifier(),
+    param_bagging,
+    cv=5,
+    n_jobs=-1
+)
+bagging_grid.fit(x_treino,y_treino)
+melhores_param = bagging_grid.best_params_
+
+bagging_classifier = BaggingClassifier(estimator=modelo_base,**melhores_param)
+bagging_classifier.fit(x_treino,y_treino)
+y_pred = bagging_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+parametros_extratrees = {
+    'n_estimators': [10,20,30],
+    'max_features': [0.5,0.7,0.9]
+}
+
+extratrees_grid = GridSearchCV(
+    ExtraTreesClassifier(),
+    parametros_extratrees,
+    cv=5,
+    n_jobs=-1
+)
+extratrees_grid.fit(x_treino,y_treino)
+melhores_param_trees = extratrees_grid.best_params_
+
+extratrees_classifier = ExtraTreesClassifier(**melhores_param_trees)
+extratrees_classifier.fit(x_treino,y_treino)
+y_pred = extratrees_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+adaboost_classifier = AdaBoostClassifier(
+    n_estimators=50,
+    learning_rate=1
+)
+adaboost_classifier.fit(x_treino,y_treino)
+
+y_pred = adaboost_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+param_cat = {
+    'iterations': [100,200,300],
+    'depth': [4,6,8],
+    'learning_rate': [0.1,0.01,0.001]
+}
+
+grid_cat = GridSearchCV(
+    estimator=CatBoostClassifier(verbose=0),
+    param_grid=param_cat,
+    cv=5,
+    n_jobs=-1,
+    scoring='accuracy'
+)
+grid_cat.fit(x_treino,y_treino)
+y_pred_cat = grid_cat.predict(x_teste)
+print(accuracy_score(y_teste,y_pred_cat))

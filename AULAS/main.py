@@ -9,6 +9,9 @@ from sklearn.ensemble import VotingClassifier
 from sklearn.naive_bayes import GaussianNB
 from sklearn.model_selection import GridSearchCV
 from sklearn.ensemble import BaggingClassifier
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import AdaBoostClassifier
+from catboost import CatBoostClassifier
 
 
 def prepara(df):
@@ -72,16 +75,69 @@ votacao = VotingClassifier(estimators=[
 ],voting='hard')
 
 validacao = cross_validate(votacao,x_treino,y_treino,cv=5)
+modelo_base = pipelines[0]
 
-parametros = {
-    'voting': ['hard','soft'],
-    'weights': [(1,1,1),(2,1,1),(1,2,1),(1,1,2)]
+param_extra = {
+    'n_estimators': [10,20,30],
+    'max_features': [0.5,0.7,0.9]
 }
 
-grid_search = GridSearchCV(votacao,parametros,n_jobs=-1)
+extratrees_grid = GridSearchCV(
+    ExtraTreesClassifier(),
+    param_extra,
+    n_jobs=-1,
+    cv=5
+)
+extratrees_grid.fit(x_treino,y_treino)
+melhores_param_trees = extratrees_grid.best_params_
 
-bagging_classifier = BaggingClassifier(n_estimators=10,random_state=42)
-bagging_classifier.fit(x_treino,y_treino)
-y_pred = bagging_classifier.predict(x_teste)
-
+extratrees_classifier = ExtraTreesClassifier(**melhores_param_trees)
+extratrees_classifier.fit(x_treino,y_treino)
+y_pred = extratrees_classifier.predict(x_teste)
 print(accuracy_score(y_teste,y_pred))
+
+modelo = AdaBoostClassifier(
+    n_estimators=50,
+    learning_rate=1
+)
+modelo.fit(x_treino,y_treino)
+
+y_pred = modelo.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+param_adaboost = {
+    'n_estimators': [50,100,200],
+    'learning_rate': [0.1,0.01,0.001]
+}
+adaboost_classifier = AdaBoostClassifier()
+
+adaboost_grid = GridSearchCV(
+    adaboost_classifier,
+    param_adaboost,
+    scoring='accuracy',
+    n_jobs=-1,
+    cv=5
+)
+adaboost_grid.fit(x_treino,y_treino)
+print(adaboost_grid.best_params_)
+
+y_pred = adaboost_grid.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+param_cat = {
+    'iterations': [100,200,300],
+    'depth': [4,6,8],
+    'learning_rate': [0.1,0.01,0.001]
+}
+
+grid_cat = GridSearchCV(
+    estimator=CatBoostClassifier(verbose=0),
+    param_grid=param_cat,
+    cv=5,
+    scoring='accuracy',
+    n_jobs=-1    
+)
+grid_cat.fit(x_treino,y_treino)
+y_pred_cat = grid_cat.predict(x_teste)
+
+print(accuracy_score(y_teste,y_pred_cat))

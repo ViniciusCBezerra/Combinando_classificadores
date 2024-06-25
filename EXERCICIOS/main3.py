@@ -6,7 +6,11 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.model_selection import cross_validate
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
-from sklearn.ensemble import VotingClassifier
+from sklearn.ensemble import BaggingClassifier, VotingClassifier
+from sklearn.metrics import accuracy_score
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import AdaBoostClassifier
+
 
 df = pd.read_csv('https://raw.githubusercontent.com/ViniciusCBezerra/ValidacaoMachineLearning/main/dados_inadimplencia.csv')
 
@@ -60,8 +64,58 @@ parametros = {
 }
 
 grid_search = GridSearchCV(votacao,parametros,n_jobs=-1)
-grid_search.fit(x_treino,y_treino)
 
-print(grid_search.best_params_)
-print(grid_search.best_score_)
+bagging_classifier = BaggingClassifier(
+    n_estimators=10,
+    random_state=42
+)
+bagging_classifier.fit(x_treino,y_treino)
 
+modelo_base = pipelines[0]
+param_bagging = {
+    'n_estimators': [10,20,30],
+    'max_samples': [0.5,0.7,0.9],
+    'max_features': [0.5,0.7,0.9]
+}
+
+bagging_grid = GridSearchCV(
+    BaggingClassifier(),
+    param_bagging,
+    cv=5,
+    n_jobs=-1
+)
+bagging_grid.fit(x_treino,y_treino)
+melhores_param = bagging_grid.best_params_
+
+bagging_classifier = BaggingClassifier(estimator=modelo_base,**melhores_param)
+bagging_classifier.fit(x_treino,y_treino)
+y_pred = bagging_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+param_extra = {
+    'n_estimators': [10,20,30],
+    'max_features': [0.5,0.7,0.9]
+}
+
+extratrees_grid = GridSearchCV(
+    ExtraTreesClassifier(),
+    param_extra,
+    cv=5,
+    n_jobs=-1
+)
+extratrees_grid.fit(x_treino,y_treino)
+melhores_param = extratrees_grid.best_params_
+
+extratrees_classifier = ExtraTreesClassifier(**melhores_param)
+extratrees_classifier.fit(x_treino,y_treino)
+y_pred = extratrees_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+adaboost_classifier = AdaBoostClassifier(
+    n_estimators=50,
+    learning_rate=1
+)
+adaboost_classifier.fit(x_treino,y_treino)
+
+y_pred = adaboost_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))

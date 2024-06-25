@@ -1,58 +1,135 @@
 import pandas as pd
-from sklearn.model_selection import train_test_split,cross_validate
-from sklearn.tree import DecisionTreeClassifier
+from sklearn.ensemble import BaggingClassifier, VotingClassifier, ExtraTreesClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.pipeline import Pipeline
-from sklearn.preprocessing import StandardScaler
 from sklearn.naive_bayes import GaussianNB
-from sklearn.ensemble import VotingClassifier
-
-dados = pd.read_csv('https://raw.githubusercontent.com/ViniciusCBezerra/ValidacaoMachineLearning/main/Exercicios/desafio002/arquivos/diabetes.csv')
-
-x = dados.drop('diabete',axis=1)
-y = dados['diabete']
-
-x_treino, x_teste , y_treino, y_teste = train_test_split(
-    x, y,
-    test_size=0.3,
-    random_state=5
-)
-
-modelo1 = DecisionTreeClassifier(random_state=5)
-cv_results = cross_validate(modelo1,x_treino,y_treino)
-modelo1.fit(x_treino,y_treino)
-y_pred1 = modelo1.predict(x_teste)
+from sklearn.pipeline import Pipeline
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV, cross_validate
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score 
+from sklearn.ensemble import AdaBoostClassifier
+from catboost import CatBoostClassifier
 
 
-modelo2 = LogisticRegression(random_state=5)
-cv_results = cross_validate(modelo2,x_treino,y_treino)
+def prepara(df):
+    df.drop(['Unnamed: 0', 'id'],axis=1,inplace=True)
+    df.dropna(inplace=True)
+    df = pd.get_dummies(df,columns=colunas_categoricas)
+    x = df.drop('satisfaction',axis=1)
+    y = df['satisfaction']
+    return x,y
 
+
+url1 = 'https://raw.githubusercontent.com/alura-cursos/combina-classificadores/main/dados/train.csv'
+url2 = 'https://raw.githubusercontent.com/alura-cursos/combina-classificadores/main/dados/test.csv'
+
+colunas_categoricas = ['Gender','Customer Type','Type of Travel', 'Class']
+
+treino = pd.read_csv(url1)
+teste = pd.read_csv(url2)
+
+x_treino,y_treino = prepara(treino)
+x_teste,y_teste = prepara(teste)
+
+modelo1 = DecisionTreeClassifier(random_state=42)
+validacao = cross_validate(modelo1, x_treino, y_treino, cv=5)
+#print(validacao['test_score'].mean())
+
+modelo2 = LogisticRegression()
 pipeline = Pipeline([
-    ('scaler',StandardScaler()),
-    ('modelo2',modelo2)
+    ('Scaler', StandardScaler()),
+    ('model',modelo2)
 ])
-validacao = cross_validate(pipeline,x_treino,y_treino)
+validacao = cross_validate(pipeline,x_treino,y_treino,cv=5)
+#print(validacao['test_score'].mean())
 
 modelo3 = GaussianNB()
 
-nome_modelo = ['Árvores','Logística','Naive Bayes']
-
+nome_modelos = ['Árvore','Logística','Naives Bayes']
 pipelines = []
-for modelo, nome in zip([modelo1, modelo2, modelo3], nome_modelo):
+
+for modelo, nome in zip([modelo1,modelo2,modelo3],nome_modelos):
     pipeline = Pipeline([
-        ('scaler',StandardScaler()),
+        ('Scaler', StandardScaler()),
         ('model',modelo)
     ])
     pipelines.append(pipeline)
 
-    validacao = cross_validate(pipeline,x_treino,y_treino)
-    print(validacao['test_score'].mean())
+    validacao = cross_validate(pipeline,x_treino,y_treino,cv=5)
+    #print(validacao['test_score'].mean())
 
 votacao = VotingClassifier(estimators=[
-    (nome_modelo[0],pipelines[0]),
-    (nome_modelo[1],pipelines[1]),
-    (nome_modelo[2],pipelines[2]),
+    (nome_modelos[0],pipelines[0]),
+    (nome_modelos[1],pipelines[1]),
+    (nome_modelos[2],pipelines[2])
 ],voting='hard')
 
 validacao = cross_validate(votacao,x_treino,y_treino,cv=5)
-print(validacao['test_score'].mean())
+#print(validacao['test_score'].mean())
+
+bagging_classifier = BaggingClassifier(
+    n_estimators=10,
+    random_state=42
+)
+bagging_classifier.fit(x_treino,y_treino)
+
+y_pred = bagging_classifier.predict(x_teste)
+
+modelo_base = pipelines[0]
+param_bagging = {
+    'n_estimators': [10,20,30],
+    'max_samples': [0.5,0.7,0.9],
+    'max_features': [0.5,0.7,0.9]
+}
+bagging_grid = GridSearchCV(
+    BaggingClassifier(),
+    param_bagging,
+    n_jobs=-1,
+    cv=5
+)
+
+param_extra = {
+    'n_estimators': [10,20,30],
+    'max_features': [0.5,0.7,0.9]
+}
+
+extratrees_grid = GridSearchCV(
+    ExtraTreesClassifier(),
+    param_extra,
+    cv=5,
+    n_jobs=-1
+)
+extratrees_grid.fit(x_treino,y_treino)
+melhores_param = extratrees_grid.best_params_
+
+extratrees_classifier = ExtraTreesClassifier(**melhores_param)
+extratrees_classifier.fit(x_treino,y_treino)
+y_pred = extratrees_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+adaboost_calssifier = AdaBoostClassifier(
+    n_estimators=50,
+    learning_rate=1
+)
+adaboost_calssifier.fit(x_treino,y_treino)
+
+y_pred = adaboost_calssifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
+
+param_cat = {
+    'iterations': [100,200,300],
+    'depth': [4,6,8],
+    'learning_rate': [0.1,0.01,0.001]
+}
+
+grid_cat = GridSearchCV(
+    estimator=CatBoostClassifier(verbose=0),
+    param_grid=param_cat,
+    scoring='accuracy',
+    n_jobs=-1,
+    cv=5
+)
+grid_cat.fit(x_treino,y_treino)
+
+y_pred = grid_cat.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
