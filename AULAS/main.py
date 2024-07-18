@@ -12,6 +12,7 @@ from sklearn.ensemble import BaggingClassifier
 from sklearn.ensemble import ExtraTreesClassifier
 from sklearn.ensemble import AdaBoostClassifier
 from catboost import CatBoostClassifier
+from sklearn.ensemble import StackingClassifier
 
 
 def prepara(df):
@@ -141,3 +142,17 @@ grid_cat.fit(x_treino,y_treino)
 y_pred_cat = grid_cat.predict(x_teste)
 
 print(accuracy_score(y_teste,y_pred_cat))
+
+
+modelos_base = [
+    (modelo_base[0],pipelines[0]),
+    (modelo_base[1],pipelines[1]),
+    (modelo_base[2],pipelines[2])
+]
+
+modelo_meta = LogisticRegression(random_state=42)
+
+stacking_classifier = StackingClassifier(estimators=modelos_base,final_estimator=modelo_meta)
+stacking_classifier.fit(x_treino,y_treino)
+y_pred = stacking_classifier.predict(x_teste)
+print(accuracy_score(y_teste,y_pred))
